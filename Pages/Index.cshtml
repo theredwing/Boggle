@@ -1,0 +1,234 @@
+﻿@page
+@model IndexModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "Home page";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Boggle</h1>
+    <br />
+    @{ 
+        var rows = 5;
+        var cols = 5;
+    }
+
+    <button id="shuffleBtn" type="button">Shuffle</button>
+    <a id="reviewLink" class="btn btn-link" href="/Review" style="margin-left:10px">Review</a>
+
+    <div id="playersSection" style="margin-top:15px; text-align:left; display:inline-block;">
+        <label for="playerCount">Players:</label>
+        <select id="playerCount">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+        </select>
+
+        <div id="playersContainer" style="margin-top:10px;"></div>
+    </div>
+
+    <table id="boggleTable">
+        @for (int r = 1; r <= rows; r++)
+        {
+            <tr>
+                @for (int c = 1; c <= cols; c++)
+                {
+                    <td class="my-box" id="@($"r{r}c{c}")">&nbsp;</td>
+                }
+            </tr>
+        }
+    </table>
+
+    <script>
+        const rows = @rows;
+        const cols = @cols;
+        const antiforgeryToken = '@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken';
+
+        // Player words storage (hidden lists after each player's turn)
+        const playerHiddenWords = [[], [], [], []];
+
+        function randomLetter() {
+            return String.fromCharCode('A'.charCodeAt(0) + Math.floor(Math.random() * 26));
+        }
+
+        function shuffleGrid() {
+            const forbidden = new Set(['J','K','Q','X','Z']);
+            for (let r = 1; r <= rows; r++) {
+                for (let c = 1; c <= cols; c++) {
+                    const id = `r${r}c${c}`;
+                    const el = document.getElementById(id);
+                    if (!el) continue;
+
+                    let letter;
+                    let attempts = 0;
+                    do {
+                        letter = randomLetter();
+                        attempts++;
+                    } while (attempts < 3 && forbidden.has(letter));
+
+                    el.textContent = letter;
+                }
+            }
+        }
+
+        // Players UI
+        const playerCountSelect = document.getElementById('playerCount');
+        const playersContainer = document.getElementById('playersContainer');
+        const shuffleBtn = document.getElementById('shuffleBtn');
+
+        function renderPlayers(count) {
+            // clear stored hidden words when player count changes
+            for (let i = 0; i < playerHiddenWords.length; i++) playerHiddenWords[i] = [];
+
+            playersContainer.innerHTML = '';
+            for (let i = 0; i < count; i++) {
+                const panel = document.createElement('div');
+                panel.style.marginBottom = '12px';
+                panel.id = `playerPanel${i}`;
+                panel.innerHTML = `
+                    <strong>Player ${i+1}</strong>
+                    <button type="button" id="startBtn${i}">Start</button>
+                    <span id="timer${i}" style="margin-left:10px">Time: 0s</span>
+                    <div id="inputArea${i}" style="margin-top:6px; display:none;">
+                        <textarea id="playerTextarea${i}" rows="3" cols="30" placeholder="Enter words separated by commas"></textarea>
+                    </div>
+                    <ul id="hiddenList${i}" style="display:none"></ul>
+                `;
+                playersContainer.appendChild(panel);
+
+                // attach start handler
+                document.getElementById(`startBtn${i}`).addEventListener('click', () => handleStart(i));
+            }
+
+            // After render, shuffle must be pressed to enable first start
+            disableAllStarts();
+        }
+
+        function disableAllStarts() {
+            const count = parseInt(playerCountSelect.value);
+            for (let i = 0; i < count; i++) {
+                const btn = document.getElementById(`startBtn${i}`);
+                if (btn) btn.disabled = true;
+                const ta = document.getElementById(`playerTextarea${i}`);
+                if (ta) ta.disabled = true;
+                const inputArea = document.getElementById(`inputArea${i}`);
+                if (inputArea) inputArea.style.display = 'none';
+                const timerEl = document.getElementById(`timer${i}`);
+                if (timerEl) timerEl.textContent = 'Time: 0s';
+            }
+        }
+
+        function enableStart(index) {
+            const btn = document.getElementById(`startBtn${index}`);
+            if (btn) btn.disabled = false;
+        }
+
+        function handleStart(index) {
+            const startBtn = document.getElementById(`startBtn${index}`);
+            if (!startBtn) return;
+            startBtn.disabled = true; // immediately disabled
+            // show and enable textarea
+            const inputArea = document.getElementById(`inputArea${index}`);
+            const ta = document.getElementById(`playerTextarea${index}`);
+            if (inputArea) inputArea.style.display = 'block';
+            if (ta) { ta.disabled = false; ta.focus(); }
+
+            // start 60s timer
+            runTimerForPlayer(index, 60).then(() => finishPlayerTurn(index));
+        }
+
+        function runTimerForPlayer(playerIndex, seconds) {
+            return new Promise(resolve => {
+                const timerEl = document.getElementById(`timer${playerIndex}`);
+                let remaining = seconds;
+                if (timerEl) timerEl.textContent = `Time: ${remaining}s`;
+                const iv = setInterval(() => {
+                    remaining--;
+                    if (timerEl) timerEl.textContent = `Time: ${remaining}s`;
+                    if (remaining <= 0) {
+                        clearInterval(iv);
+                        if (timerEl) timerEl.textContent = 'Time: 0s';
+                        resolve();
+                    }
+                }, 1000);
+            });
+        }
+
+        function finishPlayerTurn(index) {
+            // read textarea, parse comma-separated words, store in hidden list
+            const ta = document.getElementById(`playerTextarea${index}`);
+            const hiddenUl = document.getElementById(`hiddenList${index}`);
+            let words = [];
+            if (ta) {
+                const raw = ta.value || '';
+                words = raw.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                ta.value = '';
+                // hide input area
+                const inputArea = document.getElementById(`inputArea${index}`);
+                if (inputArea) inputArea.style.display = 'none';
+                ta.disabled = true;
+            }
+
+            playerHiddenWords[index] = words;
+            if (hiddenUl) {
+                hiddenUl.innerHTML = '';
+                words.forEach(w => {
+                    const li = document.createElement('li');
+                    li.textContent = w;
+                    hiddenUl.appendChild(li);
+                });
+                hiddenUl.style.display = 'none'; // keep hidden
+            }
+
+            // send words to server via AJAX
+            fetch('?handler=SaveWords', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': antiforgeryToken
+                },
+                body: JSON.stringify({ playerIndex: index, words: words })
+            })
+            .then(r => r.json())
+            .then(j => {
+                if (!j || !j.success) console.error('Failed to save words', j);
+            })
+            .catch(err => console.error('SaveWords error', err));
+
+            // mark player as done
+            const panel = document.getElementById(`playerPanel${index}`);
+            if (panel) {
+                const doneLabel = document.createElement('span');
+                doneLabel.textContent = ' Done';
+                panel.appendChild(doneLabel);
+            }
+
+            // enable next player's start or re-enable shuffle if last
+            const count = parseInt(playerCountSelect.value);
+            const next = index + 1;
+            if (next < count) {
+                enableStart(next);
+            } else {
+                // finished all players
+                shuffleBtn.disabled = false;
+            }
+        }
+
+        // Shuffle button behavior: populate grid and enable player1 start
+        shuffleBtn.addEventListener('click', () => {
+            shuffleGrid();
+            // reset hidden words
+            for (let i = 0; i < playerHiddenWords.length; i++) playerHiddenWords[i] = [];
+            // reset displays
+            renderPlayers(parseInt(playerCountSelect.value));
+            // enable first player's start
+            enableStart(0);
+            shuffleBtn.disabled = true;
+        });
+
+        // init
+        playerCountSelect.addEventListener('change', () => renderPlayers(parseInt(playerCountSelect.value)));
+        renderPlayers(parseInt(playerCountSelect.value));
+    </script>
+</div>

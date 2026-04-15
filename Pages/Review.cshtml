@@ -1,0 +1,54 @@
+@page
+@model Boggle.Pages.ReviewModel
+@{
+    ViewData["Title"] = "Review Saved Words";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Review Saved Words</h1>
+    <br />
+
+    <a href="/Index">Back to Game</a>
+
+    <div style="text-align:left; display:inline-block; margin-top:12px;">
+        @if (Model.SavedWords == null || Model.SavedWords.Count == 0)
+        {
+            <p>No saved words yet.</p>
+        }
+        else
+        {
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>Words</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var kv in Model.SavedWords)
+                    {
+                        var playerNumber = kv.Key + 1;
+                        <tr>
+                            <td>Player @playerNumber</td>
+                            <td>
+                                @if (kv.Value == null || kv.Value.Length == 0)
+                                {
+                                    <em>(no words)</em>
+                                }
+                                else
+                                {
+                                    <ul>
+                                        @foreach (var w in kv.Value)
+                                        {
+                                            <li>@w</li>
+                                        }
+                                    </ul>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
