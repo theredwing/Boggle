@@ -8,6 +8,7 @@
 <div class="text-center">
     <h1 class="display-4">Boggle</h1>
     <br />
+    <div id="notifications" style="margin-bottom:10px; text-align:left; display:inline-block;"></div>
     @{ 
         var rows = 5;
         var cols = 5;
@@ -65,7 +66,7 @@
                     do {
                         letter = randomLetter();
                         attempts++;
-                    } while (attempts < 3 && forbidden.has(letter));
+                    } while (attempts < 2 && forbidden.has(letter));
 
                     el.textContent = letter;
                 }
@@ -155,7 +156,174 @@
             });
         }
 
-        function finishPlayerTurn(index) {
+        async function savePlayerWords(index, words) {
+            try {
+                const resp = await fetch('?handler=SaveWords', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': antiforgeryToken
+                    },
+                    body: JSON.stringify({ playerIndex: index, words: words })
+                });
+
+                if (!resp.ok) {
+                    console.error('SaveWords http error', resp.status);
+                    return { success: false, error: `http ${resp.status}` };
+                }
+
+                const j = await resp.json();
+                if (!j || !j.success) {
+                    console.error('SaveWords response failure', j);
+                    return { success: false, error: j && j.error ? j.error : 'unknown' };
+                }
+
+                return { success: true };
+            }
+            catch (err) {
+                console.error('SaveWords exception', err);
+                return { success: false, error: err && err.message ? err.message : String(err) };
+            }
+        }
+
+        // Retry/backoff and offline persistence settings
+        const MAX_SAVE_RETRIES = 5;
+        const BASE_BACKOFF_MS = 1000; // 1s
+        const MAX_BACKOFF_MS = 30000; // 30s
+        const FAILED_SAVES_KEY = 'boggle_failed_saves';
+        const FAILED_GRIDS_KEY = 'boggle_failed_grids';
+
+        function getFailedSaves() {
+            try {
+                const raw = localStorage.getItem(FAILED_SAVES_KEY);
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) {
+                console.error('Failed to read failed saves', e);
+                return [];
+            }
+        }
+
+        function setFailedSaves(list) {
+            try {
+                localStorage.setItem(FAILED_SAVES_KEY, JSON.stringify(list));
+                renderFailedNotifications();
+            } catch (e) {
+                console.error('Failed to persist failed saves', e);
+            }
+        }
+
+        function addFailedSave(record) {
+            const list = getFailedSaves();
+            list.push(record);
+            setFailedSaves(list);
+        }
+
+        function removeFailedSaveById(id) {
+            const list = getFailedSaves().filter(x => x.id !== id);
+            setFailedSaves(list);
+        }
+
+        function renderFailedNotifications() {
+            const container = document.getElementById('notifications');
+            if (!container) return;
+            const list = getFailedSaves();
+            container.innerHTML = '';
+            if (!list || list.length === 0) return;
+            const badge = document.createElement('div');
+            badge.style.padding = '6px';
+            badge.style.border = '1px solid #d9534f';
+            badge.style.background = '#f2dede';
+            badge.style.color = '#a94442';
+            badge.textContent = `There are ${list.length} unsaved turn(s). `;
+            const retryAll = document.createElement('button');
+            retryAll.type = 'button';
+            retryAll.textContent = 'Retry All Failed';
+            retryAll.style.marginLeft = '8px';
+            retryAll.addEventListener('click', () => tryResendFailedSaves());
+            const clearAll = document.createElement('button');
+            clearAll.type = 'button';
+            clearAll.textContent = 'Clear All';
+            clearAll.style.marginLeft = '8px';
+            clearAll.addEventListener('click', () => { setFailedSaves([]); });
+            badge.appendChild(retryAll);
+            badge.appendChild(clearAll);
+            container.appendChild(badge);
+        }
+
+        async function tryResendFailedSaves() {
+            const list = getFailedSaves();
+            if (!list || list.length === 0) return;
+            // process sequentially to avoid spamming
+            for (const rec of list.slice()) {
+                try {
+                    const res = await savePlayerWords(rec.playerIndex, rec.words);
+                    if (res.success) {
+                        removeFailedSaveById(rec.id);
+                    }
+                } catch (e) {
+                    console.error('Resend failed for', rec, e);
+                }
+            }
+            renderFailedNotifications();
+        }
+
+        // Failed grids storage helpers
+        function getFailedGrids() {
+            try {
+                const raw = localStorage.getItem(FAILED_GRIDS_KEY);
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) {
+                console.error('Failed to read failed grids', e);
+                return [];
+            }
+        }
+
+        function setFailedGrids(list) {
+            try {
+                localStorage.setItem(FAILED_GRIDS_KEY, JSON.stringify(list));
+                renderFailedNotifications();
+            } catch (e) {
+                console.error('Failed to persist failed grids', e);
+            }
+        }
+
+        function addFailedGrid(record) {
+            const list = getFailedGrids();
+            list.push(record);
+            setFailedGrids(list);
+        }
+
+        function removeFailedGridById(id) {
+            const list = getFailedGrids().filter(x => x.id !== id);
+            setFailedGrids(list);
+        }
+
+        async function tryResendFailedGrids() {
+            const list = getFailedGrids();
+            if (!list || list.length === 0) return;
+            for (const rec of list.slice()) {
+                try {
+                    const resp = await fetch('?handler=SaveGrid', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': antiforgeryToken
+                        },
+                        body: JSON.stringify({ grid: rec.grid })
+                    });
+                    if (resp.ok) {
+                        const j = await resp.json();
+                        if (j && j.success) removeFailedGridById(rec.id);
+                    }
+                } catch (e) {
+                    console.error('Resend grid failed for', rec, e);
+                }
+            }
+            renderFailedNotifications();
+        }
+
+
+        async function finishPlayerTurn(index) {
             // read textarea, parse comma-separated words, store in hidden list
             const ta = document.getElementById(`playerTextarea${index}`);
             const hiddenUl = document.getElementById(`hiddenList${index}`);
@@ -181,22 +349,7 @@
                 hiddenUl.style.display = 'none'; // keep hidden
             }
 
-            // send words to server via AJAX
-            fetch('?handler=SaveWords', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'RequestVerificationToken': antiforgeryToken
-                },
-                body: JSON.stringify({ playerIndex: index, words: words })
-            })
-            .then(r => r.json())
-            .then(j => {
-                if (!j || !j.success) console.error('Failed to save words', j);
-            })
-            .catch(err => console.error('SaveWords error', err));
-
-            // mark player as done
+            // mark player as done (immediate feedback)
             const panel = document.getElementById(`playerPanel${index}`);
             if (panel) {
                 const doneLabel = document.createElement('span');
@@ -204,20 +357,139 @@
                 panel.appendChild(doneLabel);
             }
 
-            // enable next player's start or re-enable shuffle if last
-            const count = parseInt(playerCountSelect.value);
-            const next = index + 1;
-            if (next < count) {
-                enableStart(next);
-            } else {
-                // finished all players
-                shuffleBtn.disabled = false;
+            // show saving indicator
+            let savingEl = document.createElement('span');
+            savingEl.textContent = ' Saving...';
+            if (panel) panel.appendChild(savingEl);
+
+            // attempt to save with retries, exponential backoff, and offline persistence
+            function arraysEqual(a, b) {
+                if (!Array.isArray(a) || !Array.isArray(b)) return false;
+                if (a.length !== b.length) return false;
+                for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+                return true;
+            }
+
+            async function attemptSaveWithRetries() {
+                for (let attempt = 1; attempt <= MAX_SAVE_RETRIES; attempt++) {
+                    // update saving indicator
+                    if (savingEl) savingEl.textContent = ` Saving... (attempt ${attempt}/${MAX_SAVE_RETRIES})`;
+                    const result = await savePlayerWords(index, words);
+                    if (result.success) {
+                        // remove saving and retry UI if present
+                        if (savingEl && savingEl.parentNode) savingEl.parentNode.removeChild(savingEl);
+                        const retryBtn = document.getElementById(`retryBtn${index}`);
+                        if (retryBtn && retryBtn.parentNode) retryBtn.parentNode.removeChild(retryBtn);
+
+                        // remove any persisted failed saves matching this player's words
+                        const persisted = getFailedSaves();
+                        const remaining = persisted.filter(rec => !(rec.playerIndex === index && arraysEqual(rec.words, words)));
+                        setFailedSaves(remaining);
+
+                        // enable next player's start or re-enable shuffle if last
+                        const count = parseInt(playerCountSelect.value);
+                        const next = index + 1;
+                        if (next < count) {
+                            enableStart(next);
+                        } else {
+                            // finished all players
+                            shuffleBtn.disabled = false;
+                        }
+                        return { success: true };
+                    }
+
+                    // failed - wait exponential backoff before next attempt
+                    const delay = Math.min(BASE_BACKOFF_MS * Math.pow(2, attempt - 1), MAX_BACKOFF_MS);
+                    await new Promise(r => setTimeout(r, delay));
+                }
+
+                // All attempts failed - persist to localStorage for offline recovery
+                const failRecord = {
+                    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                    playerIndex: index,
+                    words: words,
+                    error: 'max retries exceeded',
+                    ts: Date.now()
+                };
+                addFailedSave(failRecord);
+
+                // remove saving indicator and show retry button
+                if (savingEl && savingEl.parentNode) savingEl.parentNode.removeChild(savingEl);
+                let retryBtn = document.getElementById(`retryBtn${index}`);
+                if (!retryBtn) {
+                    retryBtn = document.createElement('button');
+                    retryBtn.id = `retryBtn${index}`;
+                    retryBtn.type = 'button';
+                    retryBtn.textContent = 'Retry Save';
+                    retryBtn.style.marginLeft = '8px';
+                    retryBtn.addEventListener('click', async () => {
+                        retryBtn.disabled = true;
+                        if (panel) panel.appendChild(savingEl);
+                        // try resending from storage for this record
+                        await tryResendFailedSaves();
+                        retryBtn.disabled = false;
+                    });
+                    if (panel) panel.appendChild(retryBtn);
+                } else {
+                    retryBtn.disabled = false;
+                }
+
+                // update global notification UI
+                renderFailedNotifications();
+                console.error('Save failed for player after retries, persisted for later', index);
+                return { success: false };
+            }
+
+            await attemptSaveWithRetries();
+        }
+
+        // helper to save grid
+        async function saveGrid(gridArray) {
+            try {
+                const resp = await fetch('?handler=SaveGrid', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': antiforgeryToken
+                    },
+                    body: JSON.stringify({ grid: gridArray })
+                });
+                if (!resp.ok) return { success: false, error: `http ${resp.status}` };
+                const j = await resp.json();
+                if (!j || !j.success) return { success: false, error: j && j.error ? j.error : 'unknown' };
+                return { success: true };
+            } catch (e) {
+                return { success: false, error: e && e.message ? e.message : String(e) };
             }
         }
 
-        // Shuffle button behavior: populate grid and enable player1 start
-        shuffleBtn.addEventListener('click', () => {
+        // Shuffle button behavior: populate grid, save it, and enable player1 start
+        shuffleBtn.addEventListener('click', async () => {
             shuffleGrid();
+
+            // build grid array (flattened row-major)
+            const grid = [];
+            for (let r = 1; r <= rows; r++) {
+                for (let c = 1; c <= cols; c++) {
+                    const id = `r${r}c${c}`;
+                    const el = document.getElementById(id);
+                    grid.push(el && el.textContent ? el.textContent.trim() : '');
+                }
+            }
+
+            // try to save grid with retries; if final failure, persist locally but allow play to continue
+            let gridSaved = false;
+            for (let attempt = 1; attempt <= MAX_SAVE_RETRIES; attempt++) {
+                const res = await saveGrid(grid);
+                if (res.success) { gridSaved = true; break; }
+                const delay = Math.min(BASE_BACKOFF_MS * Math.pow(2, attempt - 1), MAX_BACKOFF_MS);
+                await new Promise(r => setTimeout(r, delay));
+            }
+            if (!gridSaved) {
+                const rec = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, grid: grid, error: 'max retries exceeded', ts: Date.now() };
+                addFailedGrid(rec);
+            }
+
             // reset hidden words
             for (let i = 0; i < playerHiddenWords.length; i++) playerHiddenWords[i] = [];
             // reset displays
@@ -230,5 +502,9 @@
         // init
         playerCountSelect.addEventListener('change', () => renderPlayers(parseInt(playerCountSelect.value)));
         renderPlayers(parseInt(playerCountSelect.value));
+        // attempt to resend failed saves and grids on load and when network returns
+        tryResendFailedSaves();
+        tryResendFailedGrids();
+        window.addEventListener('online', () => { tryResendFailedSaves(); tryResendFailedGrids(); });
     </script>
 </div>
