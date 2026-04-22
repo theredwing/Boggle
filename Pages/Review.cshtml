@@ -1,5 +1,6 @@
 @page
 @model Boggle.Pages.ReviewModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "Review Saved Words";
 }
@@ -8,24 +9,27 @@
     <h1 class="display-4">Review Saved Words</h1>
     <br />
 
-    <a href="/Index">Back to Game</a>
+    <a href="#" id="backToGame">Back to Game</a>
 
-    <div style="text-align:left; display:inline-block; margin-top:12px;">
+    <div style="text-align:left; display:inline-block; margin-top:12px;" id="PlayerResults">
         <h3>Saved Grid</h3>
+        @* Grid editor and display *@
+
+
         @if (Model.GridRows == null || Model.GridRows.Count == 0)
         {
             <p><em>No grid saved.</em></p>
         }
         else
         {
-            <table class="table table-bordered" style="width:auto; text-align:center;">
+            <table id="boggleGrid" class="table table-bordered" style="width:auto; text-align:center;">
                 <tbody>
                     @for (int r = 0; r < Model.GridRows.Count; r++)
                     {
                         <tr>
                             @for (int c = 0; c < Model.GridRows[r].Length; c++)
                             {
-                                <td style="width:32px; height:32px;">@Model.GridRows[r][c]</td>
+                                <td id="r@(r+1)c@(c+1)" style="width:32px; height:32px;">@Model.GridRows[r][c]</td>
                             }
                         </tr>
                     }
@@ -60,10 +64,17 @@
                                 }
                                 else
                                 {
-                                    <ul>
-                                        @foreach (var w in kv.Value)
+                                    <ul id="playerWords@(kv.Key)">
+                                        @foreach (var res in Model.PlayerResults[kv.Key])
                                         {
-                                            <li>@w</li>
+                                            var classes = new List<string>();
+                                            if (res.IsValid) classes.Add("valid"); else classes.Add("invalid");
+                                            if (res.IsDuplicate) classes.Add("duplicate");
+                                            var liClass = string.Join(" ", classes);
+                                            // encode path as semicolon-separated r,c pairs
+                                            var pathAttr = res.Path != null ? string.Join(";", res.Path.Select(p=>$"{p.r},{p.c}")) : string.Empty;
+                                            var defAttr = res.Definition ?? string.Empty;
+                                            <li class="@liClass" data-path="@pathAttr" data-definition="@defAttr" title="@defAttr">@res.Word @if(res.IsDuplicate){<span class="dupnote">(duplicate)</span>}</li>
                                         }
                                     </ul>
                                 }
@@ -74,4 +85,109 @@
             </table>
         }
     </div>
+<script>
+    // highlight cells when hovering words
+    function clearHighlights() {
+        document.querySelectorAll('#boggleGrid td.highlight').forEach(td => td.classList.remove('highlight'));
+        document.querySelectorAll('#boggleGrid td').forEach(td => td.style.background = '');
+    }
+
+    document.querySelectorAll('li.valid, li.invalid').forEach(li => {
+        li.addEventListener('mouseenter', () => {
+            clearHighlights();
+            const path = li.getAttribute('data-path');
+            if (!path) return;
+            const pairs = path.split(';').filter(x=>x.length>0);
+            pairs.forEach(p => {
+                const [r,c] = p.split(',').map(Number);
+                const id = `r${r+1}c${c+1}`;
+                const cell = document.getElementById(id);
+                if (cell) {
+                    cell.classList.add('highlight');
+                    cell.style.background = '#ffff99';
+                }
+            });
+        });
+        li.addEventListener('mouseleave', () => { clearHighlights(); });
+    });
+</script>
+
+<style>
+    li.valid { color: green; }
+    li.invalid { color: red; }
+    td.highlight { font-weight: bold; }
+    li.duplicate { text-decoration: line-through; color: #777; }
+    .dupnote { font-size: 0.9em; color: #777; margin-left:6px; }
+</style>
 </div>
+
+<script>
+    async function getDefinition(word) {
+        const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+        const data = await response.json();
+    }
+
+    const antiforgeryToken = '@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken';
+
+    function clearHighlights() {
+        document.querySelectorAll('#boggleGrid td.highlight').forEach(td => td.classList.remove('highlight'));
+        document.querySelectorAll('#boggleGrid td').forEach(td => td.style.background = '');
+    }
+
+    function bindWordHover() {
+        document.querySelectorAll('ul[id^="playerWords"] li').forEach(li => {
+            li.onmouseenter = null;
+            li.onmouseleave = null;
+        });
+        document.querySelectorAll('ul[id^="playerWords"] li').forEach(li => {
+            li.addEventListener('mouseenter', () => {
+                clearHighlights();
+                const path = li.getAttribute('data-path');
+                if (!path) return;
+                const pairs = path.split(';').filter(x=>x.length>0);
+                pairs.forEach(p => {
+                    const [r,c] = p.split(',').map(Number);
+                    const id = `r${r+1}c${c+1}`;
+                    const cell = document.getElementById(id);
+                    if (cell) {
+                        cell.classList.add('highlight');
+                        cell.style.background = '#ffff99';
+                    }
+                });
+            });
+            li.addEventListener('mouseleave', () => { clearHighlights(); });
+        });
+    }
+
+    // Bind back link: clean empty words then navigate back to Index
+    document.getElementById('backToGame').addEventListener('click', async (e) => {
+        e.preventDefault();
+        // Immediately clear displayed saved words for instant feedback
+        document.querySelectorAll('ul[id^="playerWords"]').forEach(ul => ul.innerHTML = '');
+
+        // Clear client-side localStorage for failed saves/grids
+        try {
+            localStorage.removeItem('boggle_failed_saves');
+            localStorage.removeItem('boggle_failed_grids');
+        } catch (err) {
+            console.error('localStorage clear error', err);
+        }
+        // Clear server-side SavedWords
+        try {
+            await fetch('?handler=CleanWords', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': antiforgeryToken
+                },
+                body: '{}'
+            });
+        } catch (err) {
+            console.error('CleanWords error', err);
+        }
+        window.location.href = '/Index';
+    });
+
+    // initial bind
+    bindWordHover();
+</script>

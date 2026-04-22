@@ -328,10 +328,28 @@
             const ta = document.getElementById(`playerTextarea${index}`);
             const hiddenUl = document.getElementById(`hiddenList${index}`);
             let words = [];
+            // panel reference needed for notes/rejected lists
+            const panel = document.getElementById(`playerPanel${index}`);
             if (ta) {
                 const raw = ta.value || '';
-                words = raw.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                const all = raw.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                // enforce minimum length 4
+                const minLen = 4;
+                const valid = all.filter(w => w.length >= minLen);
+                const rejected = all.filter(w => w.length < minLen);
+                words = valid;
                 ta.value = '';
+                // show rejected note if any
+                const existingNote = document.getElementById(`rejectedMsg${index}`);
+                if (existingNote && existingNote.parentNode) existingNote.parentNode.removeChild(existingNote);
+                if (rejected.length > 0) {
+                    const note = document.createElement('span');
+                    note.id = `rejectedMsg${index}`;
+                    note.style.marginLeft = '8px';
+                    note.style.color = '#a94442';
+                    note.textContent = `${rejected.length} word(s) discarded (must be ${minLen}+ chars)`;
+                    if (panel) panel.appendChild(note);
+                }
                 // hide input area
                 const inputArea = document.getElementById(`inputArea${index}`);
                 if (inputArea) inputArea.style.display = 'none';
@@ -341,16 +359,33 @@
             playerHiddenWords[index] = words;
             if (hiddenUl) {
                 hiddenUl.innerHTML = '';
+                // valid words (kept hidden for review)
                 words.forEach(w => {
                     const li = document.createElement('li');
                     li.textContent = w;
                     hiddenUl.appendChild(li);
                 });
                 hiddenUl.style.display = 'none'; // keep hidden
+
+                // show rejected words (those shorter than min length) visibly in gray
+                const existingRejected = document.getElementById(`rejectedList${index}`);
+                if (existingRejected && existingRejected.parentNode) existingRejected.parentNode.removeChild(existingRejected);
+                if (typeof rejected !== 'undefined' && rejected.length > 0) {
+                    const rejUl = document.createElement('ul');
+                    rejUl.id = `rejectedList${index}`;
+                    rejUl.style.color = '#777';
+                    rejUl.style.marginTop = '6px';
+                    rejected.forEach(w => {
+                        const li = document.createElement('li');
+                        li.textContent = w + ' (rejected - too short)';
+                        li.style.color = '#777';
+                        rejUl.appendChild(li);
+                    });
+                    if (panel) panel.appendChild(rejUl);
+                }
             }
 
             // mark player as done (immediate feedback)
-            const panel = document.getElementById(`playerPanel${index}`);
             if (panel) {
                 const doneLabel = document.createElement('span');
                 doneLabel.textContent = ' Done';
