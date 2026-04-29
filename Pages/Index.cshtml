@@ -8,16 +8,16 @@
 <div class="text-center">
     <h1 class="display-4">Boggle</h1>
     <br />
-    <div id="notifications" style="margin-bottom:10px; text-align:left; display:inline-block;"></div>
+    <div id="notifications"></div>
     @{ 
         var rows = 5;
         var cols = 5;
     }
 
     <button id="shuffleBtn" type="button">Shuffle</button>
-    <a id="reviewLink" class="btn btn-link" href="/Review" style="margin-left:10px">Review</a>
+    <a id="reviewLink" class="btn btn-link" href="/Review">Review</a>
 
-    <div id="playersSection" style="margin-top:15px; text-align:left; display:inline-block;">
+    <div id="playersSection">
         <label for="playerCount">Players:</label>
         <select id="playerCount">
             <option value="1">1</option>
@@ -26,7 +26,7 @@
             <option value="4">4</option>
         </select>
 
-        <div id="playersContainer" style="margin-top:10px;"></div>
+        <div id="playersContainer"></div>
     </div>
 
     <table id="boggleTable">
@@ -85,16 +85,16 @@
             playersContainer.innerHTML = '';
             for (let i = 0; i < count; i++) {
                 const panel = document.createElement('div');
-                panel.style.marginBottom = '12px';
+                panel.className = 'player-panel';
                 panel.id = `playerPanel${i}`;
                 panel.innerHTML = `
                     <strong>Player ${i+1}</strong>
                     <button type="button" id="startBtn${i}">Start</button>
-                    <span id="timer${i}" style="margin-left:10px">Time: 0s</span>
-                    <div id="inputArea${i}" style="margin-top:6px; display:none;">
+                    <span id="timer${i}" class="player-timer">Time: 0s</span>
+                    <div id="inputArea${i}" class="player-input-area">
                         <textarea id="playerTextarea${i}" rows="3" cols="30" placeholder="Enter words separated by commas"></textarea>
                     </div>
-                    <ul id="hiddenList${i}" style="display:none"></ul>
+                    <ul id="hiddenList${i}" class="player-hidden-list"></ul>
                 `;
                 playersContainer.appendChild(panel);
 
@@ -230,20 +230,15 @@
             container.innerHTML = '';
             if (!list || list.length === 0) return;
             const badge = document.createElement('div');
-            badge.style.padding = '6px';
-            badge.style.border = '1px solid #d9534f';
-            badge.style.background = '#f2dede';
-            badge.style.color = '#a94442';
+            badge.className = 'notification-badge';
             badge.textContent = `There are ${list.length} unsaved turn(s). `;
             const retryAll = document.createElement('button');
             retryAll.type = 'button';
             retryAll.textContent = 'Retry All Failed';
-            retryAll.style.marginLeft = '8px';
             retryAll.addEventListener('click', () => tryResendFailedSaves());
             const clearAll = document.createElement('button');
             clearAll.type = 'button';
             clearAll.textContent = 'Clear All';
-            clearAll.style.marginLeft = '8px';
             clearAll.addEventListener('click', () => { setFailedSaves([]); });
             badge.appendChild(retryAll);
             badge.appendChild(clearAll);
@@ -345,8 +340,7 @@
                 if (rejected.length > 0) {
                     const note = document.createElement('span');
                     note.id = `rejectedMsg${index}`;
-                    note.style.marginLeft = '8px';
-                    note.style.color = '#a94442';
+                    note.className = 'rejected-msg';
                     note.textContent = `${rejected.length} word(s) discarded (must be ${minLen}+ chars)`;
                     if (panel) panel.appendChild(note);
                 }
@@ -373,12 +367,10 @@
                 if (typeof rejected !== 'undefined' && rejected.length > 0) {
                     const rejUl = document.createElement('ul');
                     rejUl.id = `rejectedList${index}`;
-                    rejUl.style.color = '#777';
-                    rejUl.style.marginTop = '6px';
+                    rejUl.className = 'rejected-list';
                     rejected.forEach(w => {
                         const li = document.createElement('li');
                         li.textContent = w + ' (rejected - too short)';
-                        li.style.color = '#777';
                         rejUl.appendChild(li);
                     });
                     if (panel) panel.appendChild(rejUl);

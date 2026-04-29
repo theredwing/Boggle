@@ -1,0 +1,111 @@
+/* Boggle Game Styles */
+
+/* Notifications */
+#notifications {
+    margin-bottom: 10px;
+    text-align: left;
+    display: inline-block;
+}
+
+.notification-badge {
+    padding: 6px;
+    border: 1px solid #d9534f;
+    background: #f2dede;
+    color: #a94442;
+}
+
+.notification-badge button {
+    margin-left: 8px;
+}
+
+/* Review Link */
+#reviewLink {
+    margin-left: 10px;
+}
+
+/* Players Section */
+#playersSection {
+    margin-top: 15px;
+    text-align: left;
+    display: inline-block;
+}
+
+#playersContainer {
+    margin-top: 10px;
+}
+
+/* Player Panels */
+.player-panel {
+    margin-bottom: 12px;
+}
+
+.player-timer {
+    margin-left: 10px;
+}
+
+.player-input-area {
+    margin-top: 6px;
+    display: none;
+}
+
+.player-hidden-list {
+    display: none;
+}
+
+/* Rejected Words */
+.rejected-msg {
+    margin-left: 8px;
+    color: #a94442;
+}
+
+.rejected-list {
+    color: #777;
+    margin-top: 6px;
+}
+
+.rejected-list li {
+    color: #777;
+}
+
+/* Review Page */
+.review-container {
+    text-align: left;
+    display: inline-block;
+    margin-top: 12px;
+}
+
+/* Boggle Grid */
+#boggleGrid {
+    width: auto;
+    text-align: center;
+}
+
+#boggleGrid td {
+    width: 32px;
+    height: 32px;
+}
+
+#boggleGrid td.highlight {
+    font-weight: bold;
+    background: #ffff99;
+}
+
+/* Word Validation Styles */
+li.valid {
+    color: green;
+}
+
+li.invalid {
+    color: red;
+}
+
+li.duplicate {
+    text-decoration: line-through;
+    color: #777;
+}
+
+.dupnote {
+    font-size: 0.9em;
+    color: #777;
+    margin-left: 6px;
+}

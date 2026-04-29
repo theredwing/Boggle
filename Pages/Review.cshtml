@@ -11,7 +11,7 @@
 
     <a href="#" id="backToGame">Back to Game</a>
 
-    <div style="text-align:left; display:inline-block; margin-top:12px;" id="PlayerResults">
+    <div class="review-container" id="PlayerResults">
         <h3>Saved Grid</h3>
         @* Grid editor and display *@
 
@@ -22,14 +22,14 @@
         }
         else
         {
-            <table id="boggleGrid" class="table table-bordered" style="width:auto; text-align:center;">
+            <table id="boggleGrid" class="table table-bordered">
                 <tbody>
                     @for (int r = 0; r < Model.GridRows.Count; r++)
                     {
                         <tr>
                             @for (int c = 0; c < Model.GridRows[r].Length; c++)
                             {
-                                <td id="r@(r+1)c@(c+1)" style="width:32px; height:32px;">@Model.GridRows[r][c]</td>
+                                <td id="r@(r+1)c@(c+1)">@Model.GridRows[r][c]</td>
                             }
                         </tr>
                     }
@@ -104,21 +104,12 @@
                 const cell = document.getElementById(id);
                 if (cell) {
                     cell.classList.add('highlight');
-                    cell.style.background = '#ffff99';
                 }
             });
         });
         li.addEventListener('mouseleave', () => { clearHighlights(); });
     });
 </script>
-
-<style>
-    li.valid { color: green; }
-    li.invalid { color: red; }
-    td.highlight { font-weight: bold; }
-    li.duplicate { text-decoration: line-through; color: #777; }
-    .dupnote { font-size: 0.9em; color: #777; margin-left:6px; }
-</style>
 </div>
 
 <script>
