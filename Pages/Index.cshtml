@@ -16,6 +16,7 @@
 
     <button id="shuffleBtn" type="button">Shuffle</button>
     <a id="reviewLink" class="btn btn-link" href="/Review">Review</a>
+    <a id="instructionsLink" class="btn btn-link" href="#">Instructions</a>
 
     <div id="playersSection">
         <label for="playerCount">Players:</label>
@@ -41,6 +42,20 @@
         }
     </table>
 
+    <!-- Instructions Modal -->
+    <div id="instructionsModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>How to Play Boggle</h2>
+            <ol class="instructions-list">
+                <li>Select the number of players</li>
+                <li>Press "Shuffle" to generate a new letter grid</li>
+                <li>The lowest numbered player clicks "Start", enters words separated by commas, until time expires</li>
+                <li>The next lowest numbered player repeats step 3, and so on</li>
+            </ol>
+        </div>
+    </div>
+
     <script>
         const rows = @rows;
         const cols = @cols;
@@ -49,107 +64,128 @@
         // Player words storage (hidden lists after each player's turn)
         const playerHiddenWords = [[], [], [], []];
 
+        // Track completed players
+        let completedPlayers = 0;
+        let totalPlayers = 0;
+
+        // jQuery elements (will be initialized on document ready)
+        let $playerCountSelect, $playersContainer, $shuffleBtn, $reviewLink;
+
         function randomLetter() {
             return String.fromCharCode('A'.charCodeAt(0) + Math.floor(Math.random() * 26));
         }
 
         function shuffleGrid() {
             const forbidden = new Set(['J','K','Q','X','Z']);
+            const vowels = new Set(['A','E','I','O','U','Y']);
+
             for (let r = 1; r <= rows; r++) {
                 for (let c = 1; c <= cols; c++) {
                     const id = `r${r}c${c}`;
-                    const el = document.getElementById(id);
-                    if (!el) continue;
+                    const $el = $(`#${id}`);
+                    if ($el.length === 0) continue;
 
                     let letter;
                     let attempts = 0;
+
+                    // First pass: try to avoid forbidden letters (max 2 attempts)
                     do {
                         letter = randomLetter();
                         attempts++;
                     } while (attempts < 2 && forbidden.has(letter));
 
-                    el.textContent = letter;
+                    // Second pass: if consonant (not Y), try one more time for vowel
+                    if (!vowels.has(letter)) {
+                        const tryVowel = randomLetter();
+                        if (vowels.has(tryVowel)) {
+                            letter = tryVowel;
+                        }
+                    }
+
+                    $el.text(letter);
                 }
             }
         }
-
-        // Players UI
-        const playerCountSelect = document.getElementById('playerCount');
-        const playersContainer = document.getElementById('playersContainer');
-        const shuffleBtn = document.getElementById('shuffleBtn');
 
         function renderPlayers(count) {
             // clear stored hidden words when player count changes
             for (let i = 0; i < playerHiddenWords.length; i++) playerHiddenWords[i] = [];
 
-            playersContainer.innerHTML = '';
+            // Reset completed players counter
+            completedPlayers = 0;
+            totalPlayers = count;
+
+            $playersContainer.empty();
             for (let i = 0; i < count; i++) {
-                const panel = document.createElement('div');
-                panel.className = 'player-panel';
-                panel.id = `playerPanel${i}`;
-                panel.innerHTML = `
-                    <strong>Player ${i+1}</strong>
-                    <button type="button" id="startBtn${i}">Start</button>
-                    <span id="timer${i}" class="player-timer">Time: 0s</span>
-                    <div id="inputArea${i}" class="player-input-area">
-                        <textarea id="playerTextarea${i}" rows="3" cols="30" placeholder="Enter words separated by commas"></textarea>
-                    </div>
-                    <ul id="hiddenList${i}" class="player-hidden-list"></ul>
-                `;
-                playersContainer.appendChild(panel);
+                const $panel = $('<div></div>')
+                    .addClass('player-panel')
+                    .attr('id', `playerPanel${i}`)
+                    .html(`
+                        <strong>Player ${i+1}</strong>
+                        <button type="button" id="startBtn${i}">Start</button>
+                        <span id="timer${i}" class="player-timer">Time: 0s</span>
+                        <div id="inputArea${i}" class="player-input-area">
+                            <textarea id="playerTextarea${i}" rows="3" cols="30" placeholder="Enter words separated by commas"></textarea>
+                        </div>
+                        <ul id="hiddenList${i}" class="player-hidden-list"></ul>
+                    `);
+                $playersContainer.append($panel);
 
                 // attach start handler
-                document.getElementById(`startBtn${i}`).addEventListener('click', () => handleStart(i));
+                $(`#startBtn${i}`).on('click', () => handleStart(i));
             }
 
             // After render, shuffle must be pressed to enable first start
             disableAllStarts();
         }
 
+        function updateReviewLinkState() {
+            if (completedPlayers === totalPlayers && totalPlayers > 0) {
+                $reviewLink.removeClass('disabled');
+            } else {
+                $reviewLink.addClass('disabled');
+            }
+        }
+
         function disableAllStarts() {
-            const count = parseInt(playerCountSelect.value);
+            const count = parseInt($playerCountSelect.val());
             for (let i = 0; i < count; i++) {
-                const btn = document.getElementById(`startBtn${i}`);
-                if (btn) btn.disabled = true;
-                const ta = document.getElementById(`playerTextarea${i}`);
-                if (ta) ta.disabled = true;
-                const inputArea = document.getElementById(`inputArea${i}`);
-                if (inputArea) inputArea.style.display = 'none';
-                const timerEl = document.getElementById(`timer${i}`);
-                if (timerEl) timerEl.textContent = 'Time: 0s';
+                $(`#startBtn${i}`).prop('disabled', true);
+                $(`#playerTextarea${i}`).prop('disabled', true);
+                $(`#inputArea${i}`).hide();
+                $(`#timer${i}`).text('Time: 0s');
             }
         }
 
         function enableStart(index) {
-            const btn = document.getElementById(`startBtn${index}`);
-            if (btn) btn.disabled = false;
+            $(`#startBtn${index}`).prop('disabled', false);
         }
 
         function handleStart(index) {
-            const startBtn = document.getElementById(`startBtn${index}`);
-            if (!startBtn) return;
-            startBtn.disabled = true; // immediately disabled
+            const $startBtn = $(`#startBtn${index}`);
+            if ($startBtn.length === 0) return;
+            $startBtn.prop('disabled', true); // immediately disabled
             // show and enable textarea
-            const inputArea = document.getElementById(`inputArea${index}`);
-            const ta = document.getElementById(`playerTextarea${index}`);
-            if (inputArea) inputArea.style.display = 'block';
-            if (ta) { ta.disabled = false; ta.focus(); }
+            const $inputArea = $(`#inputArea${index}`);
+            const $ta = $(`#playerTextarea${index}`);
+            $inputArea.show();
+            $ta.prop('disabled', false).focus();
 
-            // start 60s timer
-            runTimerForPlayer(index, 60).then(() => finishPlayerTurn(index));
+            // start 180s timer (3 minutes)
+            runTimerForPlayer(index, 180).then(() => finishPlayerTurn(index));
         }
 
         function runTimerForPlayer(playerIndex, seconds) {
             return new Promise(resolve => {
-                const timerEl = document.getElementById(`timer${playerIndex}`);
+                const $timerEl = $(`#timer${playerIndex}`);
                 let remaining = seconds;
-                if (timerEl) timerEl.textContent = `Time: ${remaining}s`;
+                $timerEl.text(`Time: ${remaining}s`);
                 const iv = setInterval(() => {
                     remaining--;
-                    if (timerEl) timerEl.textContent = `Time: ${remaining}s`;
+                    $timerEl.text(`Time: ${remaining}s`);
                     if (remaining <= 0) {
                         clearInterval(iv);
-                        if (timerEl) timerEl.textContent = 'Time: 0s';
+                        $timerEl.text('Time: 0s');
                         resolve();
                     }
                 }, 1000);
@@ -158,24 +194,19 @@
 
         async function savePlayerWords(index, words) {
             try {
-                const resp = await fetch('?handler=SaveWords', {
+                const resp = await $.ajax({
+                    url: '?handler=SaveWords',
                     method: 'POST',
+                    contentType: 'application/json',
                     headers: {
-                        'Content-Type': 'application/json',
                         'RequestVerificationToken': antiforgeryToken
                     },
-                    body: JSON.stringify({ playerIndex: index, words: words })
+                    data: JSON.stringify({ playerIndex: index, words: words })
                 });
 
-                if (!resp.ok) {
-                    console.error('SaveWords http error', resp.status);
-                    return { success: false, error: `http ${resp.status}` };
-                }
-
-                const j = await resp.json();
-                if (!j || !j.success) {
-                    console.error('SaveWords response failure', j);
-                    return { success: false, error: j && j.error ? j.error : 'unknown' };
+                if (!resp || !resp.success) {
+                    console.error('SaveWords response failure', resp);
+                    return { success: false, error: resp && resp.error ? resp.error : 'unknown' };
                 }
 
                 return { success: true };
@@ -224,25 +255,24 @@
         }
 
         function renderFailedNotifications() {
-            const container = document.getElementById('notifications');
-            if (!container) return;
+            const $container = $('#notifications');
+            if ($container.length === 0) return;
             const list = getFailedSaves();
-            container.innerHTML = '';
+            $container.empty();
             if (!list || list.length === 0) return;
-            const badge = document.createElement('div');
-            badge.className = 'notification-badge';
-            badge.textContent = `There are ${list.length} unsaved turn(s). `;
-            const retryAll = document.createElement('button');
-            retryAll.type = 'button';
-            retryAll.textContent = 'Retry All Failed';
-            retryAll.addEventListener('click', () => tryResendFailedSaves());
-            const clearAll = document.createElement('button');
-            clearAll.type = 'button';
-            clearAll.textContent = 'Clear All';
-            clearAll.addEventListener('click', () => { setFailedSaves([]); });
-            badge.appendChild(retryAll);
-            badge.appendChild(clearAll);
-            container.appendChild(badge);
+            const $badge = $('<div></div>')
+                .addClass('notification-badge')
+                .text(`There are ${list.length} unsaved turn(s). `);
+            const $retryAll = $('<button></button>')
+                .attr('type', 'button')
+                .text('Retry All Failed')
+                .on('click', () => tryResendFailedSaves());
+            const $clearAll = $('<button></button>')
+                .attr('type', 'button')
+                .text('Clear All')
+                .on('click', () => { setFailedSaves([]); });
+            $badge.append($retryAll).append($clearAll);
+            $container.append($badge);
         }
 
         async function tryResendFailedSaves() {
@@ -298,18 +328,16 @@
             if (!list || list.length === 0) return;
             for (const rec of list.slice()) {
                 try {
-                    const resp = await fetch('?handler=SaveGrid', {
+                    const resp = await $.ajax({
+                        url: '?handler=SaveGrid',
                         method: 'POST',
+                        contentType: 'application/json',
                         headers: {
-                            'Content-Type': 'application/json',
                             'RequestVerificationToken': antiforgeryToken
                         },
-                        body: JSON.stringify({ grid: rec.grid })
+                        data: JSON.stringify({ grid: rec.grid })
                     });
-                    if (resp.ok) {
-                        const j = await resp.json();
-                        if (j && j.success) removeFailedGridById(rec.id);
-                    }
+                    if (resp && resp.success) removeFailedGridById(rec.id);
                 } catch (e) {
                     console.error('Resend grid failed for', rec, e);
                 }
@@ -320,74 +348,64 @@
 
         async function finishPlayerTurn(index) {
             // read textarea, parse comma-separated words, store in hidden list
-            const ta = document.getElementById(`playerTextarea${index}`);
-            const hiddenUl = document.getElementById(`hiddenList${index}`);
+            const $ta = $(`#playerTextarea${index}`);
+            const $hiddenUl = $(`#hiddenList${index}`);
             let words = [];
             // panel reference needed for notes/rejected lists
-            const panel = document.getElementById(`playerPanel${index}`);
-            if (ta) {
-                const raw = ta.value || '';
+            const $panel = $(`#playerPanel${index}`);
+            if ($ta.length > 0) {
+                const raw = $ta.val() || '';
                 const all = raw.split(',').map(s => s.trim()).filter(s => s.length > 0);
                 // enforce minimum length 4
                 const minLen = 4;
                 const valid = all.filter(w => w.length >= minLen);
                 const rejected = all.filter(w => w.length < minLen);
                 words = valid;
-                ta.value = '';
+                $ta.val('');
                 // show rejected note if any
-                const existingNote = document.getElementById(`rejectedMsg${index}`);
-                if (existingNote && existingNote.parentNode) existingNote.parentNode.removeChild(existingNote);
+                $(`#rejectedMsg${index}`).remove();
                 if (rejected.length > 0) {
-                    const note = document.createElement('span');
-                    note.id = `rejectedMsg${index}`;
-                    note.className = 'rejected-msg';
-                    note.textContent = `${rejected.length} word(s) discarded (must be ${minLen}+ chars)`;
-                    if (panel) panel.appendChild(note);
+                    const $note = $('<span></span>')
+                        .attr('id', `rejectedMsg${index}`)
+                        .addClass('rejected-msg')
+                        .text(`${rejected.length} word(s) discarded (must be ${minLen}+ chars)`);
+                    $panel.append($note);
                 }
                 // hide input area
-                const inputArea = document.getElementById(`inputArea${index}`);
-                if (inputArea) inputArea.style.display = 'none';
-                ta.disabled = true;
-            }
+                $(`#inputArea${index}`).hide();
+                $ta.prop('disabled', true);
 
-            playerHiddenWords[index] = words;
-            if (hiddenUl) {
-                hiddenUl.innerHTML = '';
-                // valid words (kept hidden for review)
-                words.forEach(w => {
-                    const li = document.createElement('li');
-                    li.textContent = w;
-                    hiddenUl.appendChild(li);
-                });
-                hiddenUl.style.display = 'none'; // keep hidden
-
-                // show rejected words (those shorter than min length) visibly in gray
-                const existingRejected = document.getElementById(`rejectedList${index}`);
-                if (existingRejected && existingRejected.parentNode) existingRejected.parentNode.removeChild(existingRejected);
-                if (typeof rejected !== 'undefined' && rejected.length > 0) {
-                    const rejUl = document.createElement('ul');
-                    rejUl.id = `rejectedList${index}`;
-                    rejUl.className = 'rejected-list';
-                    rejected.forEach(w => {
-                        const li = document.createElement('li');
-                        li.textContent = w + ' (rejected - too short)';
-                        rejUl.appendChild(li);
+                playerHiddenWords[index] = words;
+                if ($hiddenUl.length > 0) {
+                    $hiddenUl.empty();
+                    // valid words (kept hidden for review)
+                    words.forEach(w => {
+                        $('<li></li>').text(w).appendTo($hiddenUl);
                     });
-                    if (panel) panel.appendChild(rejUl);
+                    $hiddenUl.hide(); // keep hidden
+
+                    // show rejected words (those shorter than min length) visibly in gray
+                    $(`#rejectedList${index}`).remove();
+                    if (rejected.length > 0) {
+                        const $rejUl = $('<ul></ul>')
+                            .attr('id', `rejectedList${index}`)
+                            .addClass('rejected-list');
+                        rejected.forEach(w => {
+                            $('<li></li>').text(w + ' (rejected - too short)').appendTo($rejUl);
+                        });
+                        $panel.append($rejUl);
+                    }
                 }
             }
 
             // mark player as done (immediate feedback)
-            if (panel) {
-                const doneLabel = document.createElement('span');
-                doneLabel.textContent = ' Done';
-                panel.appendChild(doneLabel);
+            if ($panel.length > 0) {
+                $('<span></span>').text(' Done').appendTo($panel);
             }
 
             // show saving indicator
-            let savingEl = document.createElement('span');
-            savingEl.textContent = ' Saving...';
-            if (panel) panel.appendChild(savingEl);
+            let $savingEl = $('<span></span>').text(' Saving...');
+            $panel.append($savingEl);
 
             // attempt to save with retries, exponential backoff, and offline persistence
             function arraysEqual(a, b) {
@@ -400,27 +418,30 @@
             async function attemptSaveWithRetries() {
                 for (let attempt = 1; attempt <= MAX_SAVE_RETRIES; attempt++) {
                     // update saving indicator
-                    if (savingEl) savingEl.textContent = ` Saving... (attempt ${attempt}/${MAX_SAVE_RETRIES})`;
+                    if ($savingEl.length > 0) $savingEl.text(` Saving... (attempt ${attempt}/${MAX_SAVE_RETRIES})`);
                     const result = await savePlayerWords(index, words);
                     if (result.success) {
                         // remove saving and retry UI if present
-                        if (savingEl && savingEl.parentNode) savingEl.parentNode.removeChild(savingEl);
-                        const retryBtn = document.getElementById(`retryBtn${index}`);
-                        if (retryBtn && retryBtn.parentNode) retryBtn.parentNode.removeChild(retryBtn);
+                        $savingEl.remove();
+                        $(`#retryBtn${index}`).remove();
 
                         // remove any persisted failed saves matching this player's words
                         const persisted = getFailedSaves();
                         const remaining = persisted.filter(rec => !(rec.playerIndex === index && arraysEqual(rec.words, words)));
                         setFailedSaves(remaining);
 
+                        // Increment completed players count
+                        completedPlayers++;
+                        updateReviewLinkState();
+
                         // enable next player's start or re-enable shuffle if last
-                        const count = parseInt(playerCountSelect.value);
+                        const count = parseInt($playerCountSelect.val());
                         const next = index + 1;
                         if (next < count) {
                             enableStart(next);
                         } else {
                             // finished all players
-                            shuffleBtn.disabled = false;
+                            $shuffleBtn.prop('disabled', false);
                         }
                         return { success: true };
                     }
@@ -441,24 +462,24 @@
                 addFailedSave(failRecord);
 
                 // remove saving indicator and show retry button
-                if (savingEl && savingEl.parentNode) savingEl.parentNode.removeChild(savingEl);
-                let retryBtn = document.getElementById(`retryBtn${index}`);
-                if (!retryBtn) {
-                    retryBtn = document.createElement('button');
-                    retryBtn.id = `retryBtn${index}`;
-                    retryBtn.type = 'button';
-                    retryBtn.textContent = 'Retry Save';
-                    retryBtn.style.marginLeft = '8px';
-                    retryBtn.addEventListener('click', async () => {
-                        retryBtn.disabled = true;
-                        if (panel) panel.appendChild(savingEl);
-                        // try resending from storage for this record
-                        await tryResendFailedSaves();
-                        retryBtn.disabled = false;
-                    });
-                    if (panel) panel.appendChild(retryBtn);
+                $savingEl.remove();
+                let $retryBtn = $(`#retryBtn${index}`);
+                if ($retryBtn.length === 0) {
+                    $retryBtn = $('<button></button>')
+                        .attr('id', `retryBtn${index}`)
+                        .attr('type', 'button')
+                        .text('Retry Save')
+                        .css('margin-left', '8px')
+                        .on('click', async function() {
+                            $(this).prop('disabled', true);
+                            $panel.append($savingEl);
+                            // try resending from storage for this record
+                            await tryResendFailedSaves();
+                            $(this).prop('disabled', false);
+                        });
+                    $panel.append($retryBtn);
                 } else {
-                    retryBtn.disabled = false;
+                    $retryBtn.prop('disabled', false);
                 }
 
                 // update global notification UI
@@ -473,65 +494,103 @@
         // helper to save grid
         async function saveGrid(gridArray) {
             try {
-                const resp = await fetch('?handler=SaveGrid', {
+                const resp = await $.ajax({
+                    url: '?handler=SaveGrid',
                     method: 'POST',
+                    contentType: 'application/json',
                     headers: {
-                        'Content-Type': 'application/json',
                         'RequestVerificationToken': antiforgeryToken
                     },
-                    body: JSON.stringify({ grid: gridArray })
+                    data: JSON.stringify({ grid: gridArray })
                 });
-                if (!resp.ok) return { success: false, error: `http ${resp.status}` };
-                const j = await resp.json();
-                if (!j || !j.success) return { success: false, error: j && j.error ? j.error : 'unknown' };
+                if (!resp || !resp.success) return { success: false, error: resp && resp.error ? resp.error : 'unknown' };
                 return { success: true };
             } catch (e) {
                 return { success: false, error: e && e.message ? e.message : String(e) };
             }
         }
 
-        // Shuffle button behavior: populate grid, save it, and enable player1 start
-        shuffleBtn.addEventListener('click', async () => {
-            shuffleGrid();
+        // Document ready - initialize jQuery elements and event handlers
+        $(function() {
+            // Initialize jQuery elements
+            $playerCountSelect = $('#playerCount');
+            $playersContainer = $('#playersContainer');
+            $shuffleBtn = $('#shuffleBtn');
+            $reviewLink = $('#reviewLink');
 
-            // build grid array (flattened row-major)
-            const grid = [];
-            for (let r = 1; r <= rows; r++) {
-                for (let c = 1; c <= cols; c++) {
-                    const id = `r${r}c${c}`;
-                    const el = document.getElementById(id);
-                    grid.push(el && el.textContent ? el.textContent.trim() : '');
+            // Disable Review link initially
+            $reviewLink.addClass('disabled');
+
+            // Shuffle button behavior: populate grid, save it, and enable player1 start
+            $shuffleBtn.on('click', async () => {
+                shuffleGrid();
+
+                // build grid array (flattened row-major)
+                const grid = [];
+                for (let r = 1; r <= rows; r++) {
+                    for (let c = 1; c <= cols; c++) {
+                        const id = `r${r}c${c}`;
+                        const $el = $(`#${id}`);
+                        grid.push($el.length > 0 && $el.text() ? $el.text().trim() : '');
+                    }
                 }
-            }
 
-            // try to save grid with retries; if final failure, persist locally but allow play to continue
-            let gridSaved = false;
-            for (let attempt = 1; attempt <= MAX_SAVE_RETRIES; attempt++) {
-                const res = await saveGrid(grid);
-                if (res.success) { gridSaved = true; break; }
-                const delay = Math.min(BASE_BACKOFF_MS * Math.pow(2, attempt - 1), MAX_BACKOFF_MS);
-                await new Promise(r => setTimeout(r, delay));
-            }
-            if (!gridSaved) {
-                const rec = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, grid: grid, error: 'max retries exceeded', ts: Date.now() };
-                addFailedGrid(rec);
-            }
+                // try to save grid with retries; if final failure, persist locally but allow play to continue
+                let gridSaved = false;
+                for (let attempt = 1; attempt <= MAX_SAVE_RETRIES; attempt++) {
+                    const res = await saveGrid(grid);
+                    if (res.success) { gridSaved = true; break; }
+                    const delay = Math.min(BASE_BACKOFF_MS * Math.pow(2, attempt - 1), MAX_BACKOFF_MS);
+                    await new Promise(r => setTimeout(r, delay));
+                }
+                if (!gridSaved) {
+                    const rec = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, grid: grid, error: 'max retries exceeded', ts: Date.now() };
+                    addFailedGrid(rec);
+                }
 
-            // reset hidden words
-            for (let i = 0; i < playerHiddenWords.length; i++) playerHiddenWords[i] = [];
-            // reset displays
-            renderPlayers(parseInt(playerCountSelect.value));
-            // enable first player's start
-            enableStart(0);
-            shuffleBtn.disabled = true;
+                // reset hidden words
+                for (let i = 0; i < playerHiddenWords.length; i++) playerHiddenWords[i] = [];
+                // reset displays
+                renderPlayers(parseInt($playerCountSelect.val()));
+                // enable first player's start
+                enableStart(0);
+                $shuffleBtn.prop('disabled', true);
+            });
+
+            // Player count change handler
+            $playerCountSelect.on('change', () => {
+                renderPlayers(parseInt($playerCountSelect.val()));
+                updateReviewLinkState();
+            });
+
+            // Initial render
+            renderPlayers(parseInt($playerCountSelect.val()));
+            updateReviewLinkState();
+
+            // attempt to resend failed saves and grids on load and when network returns
+            tryResendFailedSaves();
+            tryResendFailedGrids();
+            $(window).on('online', () => { tryResendFailedSaves(); tryResendFailedGrids(); });
+
+            // Instructions modal functionality
+            const $modal = $('#instructionsModal');
+            const $instructionsLink = $('#instructionsLink');
+            const $closeBtn = $('.close');
+
+            $instructionsLink.on('click', (e) => {
+                e.preventDefault();
+                $modal.show();
+            });
+
+            $closeBtn.on('click', () => {
+                $modal.hide();
+            });
+
+            $(window).on('click', (e) => {
+                if (e.target.id === 'instructionsModal') {
+                    $modal.hide();
+                }
+            });
         });
-
-        // init
-        playerCountSelect.addEventListener('change', () => renderPlayers(parseInt(playerCountSelect.value)));
-        renderPlayers(parseInt(playerCountSelect.value));
-        // attempt to resend failed saves and grids on load and when network returns
-        tryResendFailedSaves();
-        tryResendFailedGrids();
-        window.addEventListener('online', () => { tryResendFailedSaves(); tryResendFailedGrids(); });
     </script>
 </div>

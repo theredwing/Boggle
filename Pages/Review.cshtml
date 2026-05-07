@@ -85,100 +85,91 @@
             </table>
         }
     </div>
+
 <script>
-    // highlight cells when hovering words
-    function clearHighlights() {
-        document.querySelectorAll('#boggleGrid td.highlight').forEach(td => td.classList.remove('highlight'));
-        document.querySelectorAll('#boggleGrid td').forEach(td => td.style.background = '');
+    const antiforgeryToken = '@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken';
+
+    async function getDefinition(word) {
+        const response = await $.get(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+        return response;
     }
 
-    document.querySelectorAll('li.valid, li.invalid').forEach(li => {
-        li.addEventListener('mouseenter', () => {
+    function clearHighlights() {
+        $('#boggleGrid td.highlight').removeClass('highlight');
+        $('#boggleGrid td').css('background', '');
+    }
+
+    function bindWordHover() {
+        $('ul[id^="playerWords"] li').off('mouseenter mouseleave');
+        $('ul[id^="playerWords"] li').on('mouseenter', function() {
             clearHighlights();
-            const path = li.getAttribute('data-path');
+            const path = $(this).attr('data-path');
             if (!path) return;
             const pairs = path.split(';').filter(x=>x.length>0);
             pairs.forEach(p => {
                 const [r,c] = p.split(',').map(Number);
                 const id = `r${r+1}c${c+1}`;
-                const cell = document.getElementById(id);
-                if (cell) {
-                    cell.classList.add('highlight');
+                const $cell = $(`#${id}`);
+                if ($cell.length > 0) {
+                    $cell.addClass('highlight');
+                    $cell.css('background', '#ffff99');
                 }
             });
         });
-        li.addEventListener('mouseleave', () => { clearHighlights(); });
-    });
-</script>
-</div>
 
-<script>
-    async function getDefinition(word) {
-        const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
-        const data = await response.json();
-    }
+        $('ul[id^="playerWords"] li').on('mouseleave', () => { clearHighlights(); });
 
-    const antiforgeryToken = '@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken';
-
-    function clearHighlights() {
-        document.querySelectorAll('#boggleGrid td.highlight').forEach(td => td.classList.remove('highlight'));
-        document.querySelectorAll('#boggleGrid td').forEach(td => td.style.background = '');
-    }
-
-    function bindWordHover() {
-        document.querySelectorAll('ul[id^="playerWords"] li').forEach(li => {
-            li.onmouseenter = null;
-            li.onmouseleave = null;
+        $('li.valid, li.invalid').on('mouseenter', function() {
+            clearHighlights();
+            const path = $(this).attr('data-path');
+            if (!path) return;
+            const pairs = path.split(';').filter(x=>x.length>0);
+            pairs.forEach(p => {
+                const [r,c] = p.split(',').map(Number);
+                const id = `r${r+1}c${c+1}`;
+                const $cell = $(`#${id}`);
+                if ($cell.length > 0) {
+                    $cell.addClass('highlight');
+                }
+            });
         });
-        document.querySelectorAll('ul[id^="playerWords"] li').forEach(li => {
-            li.addEventListener('mouseenter', () => {
-                clearHighlights();
-                const path = li.getAttribute('data-path');
-                if (!path) return;
-                const pairs = path.split(';').filter(x=>x.length>0);
-                pairs.forEach(p => {
-                    const [r,c] = p.split(',').map(Number);
-                    const id = `r${r+1}c${c+1}`;
-                    const cell = document.getElementById(id);
-                    if (cell) {
-                        cell.classList.add('highlight');
-                        cell.style.background = '#ffff99';
-                    }
+
+        $('li.valid, li.invalid').on('mouseleave', () => { clearHighlights(); });
+    }
+
+    // Document ready
+    $(function() {
+        // Bind back link: clean empty words then navigate back to Index
+        $('#backToGame').on('click', async (e) => {
+            e.preventDefault();
+            // Immediately clear displayed saved words for instant feedback
+            $('ul[id^="playerWords"]').empty();
+
+            // Clear client-side localStorage for failed saves/grids
+            try {
+                localStorage.removeItem('boggle_failed_saves');
+                localStorage.removeItem('boggle_failed_grids');
+            } catch (err) {
+                console.error('localStorage clear error', err);
+            }
+            // Clear server-side SavedWords
+            try {
+                await $.ajax({
+                    url: '?handler=CleanWords',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    headers: {
+                        'RequestVerificationToken': antiforgeryToken
+                    },
+                    data: '{}'
                 });
-            });
-            li.addEventListener('mouseleave', () => { clearHighlights(); });
+            } catch (err) {
+                console.error('CleanWords error', err);
+            }
+            window.location.href = '/Index';
         });
-    }
 
-    // Bind back link: clean empty words then navigate back to Index
-    document.getElementById('backToGame').addEventListener('click', async (e) => {
-        e.preventDefault();
-        // Immediately clear displayed saved words for instant feedback
-        document.querySelectorAll('ul[id^="playerWords"]').forEach(ul => ul.innerHTML = '');
-
-        // Clear client-side localStorage for failed saves/grids
-        try {
-            localStorage.removeItem('boggle_failed_saves');
-            localStorage.removeItem('boggle_failed_grids');
-        } catch (err) {
-            console.error('localStorage clear error', err);
-        }
-        // Clear server-side SavedWords
-        try {
-            await fetch('?handler=CleanWords', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'RequestVerificationToken': antiforgeryToken
-                },
-                body: '{}'
-            });
-        } catch (err) {
-            console.error('CleanWords error', err);
-        }
-        window.location.href = '/Index';
+        // initial bind
+        bindWordHover();
     });
-
-    // initial bind
-    bindWordHover();
 </script>

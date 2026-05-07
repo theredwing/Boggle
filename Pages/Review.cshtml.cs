@@ -74,16 +74,31 @@ namespace Boggle.Pages
             foreach (var kv in SavedWords)
             {
                 var list = new List<WordResult>();
+                var seenWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
                 foreach (var w in kv.Value ?? new string[0])
                 {
                     var res = new WordResult { Word = w, IsValid = false, Path = null };
                     if (!string.IsNullOrWhiteSpace(w))
                     {
-                        var path = FindPathForWord(w, charGrid);
-                        if (path != null)
+                        var normalizedWord = w.Trim().ToLowerInvariant();
+
+                        // Check if this player already entered this word
+                        if (seenWords.Contains(normalizedWord))
                         {
-                            res.IsValid = true;
-                            res.Path = path;
+                            // Mark as duplicate within same player (will be crossed off)
+                            res.IsDuplicate = true;
+                        }
+                        else
+                        {
+                            // First occurrence - validate it
+                            seenWords.Add(normalizedWord);
+                            var path = FindPathForWord(w, charGrid);
+                            if (path != null)
+                            {
+                                res.IsValid = true;
+                                res.Path = path;
+                            }
                         }
                     }
                     list.Add(res);
@@ -92,22 +107,34 @@ namespace Boggle.Pages
             }
 
             // Mark duplicates across players (case-insensitive). If multiple players submitted the same word, mark as duplicate.
-            var wordGroups = new Dictionary<string, List<WordResult>>();
+            // This marks words that appear in DIFFERENT players' lists.
+            var wordGroups = new Dictionary<string, List<(int playerIndex, WordResult result)>>();
             foreach (var kv in PlayerResults)
             {
                 foreach (var wr in kv.Value)
                 {
                     if (string.IsNullOrWhiteSpace(wr.Word)) continue;
                     var key = wr.Word.Trim().ToLowerInvariant();
-                    if (!wordGroups.TryGetValue(key, out var container)) { container = new List<WordResult>(); wordGroups[key] = container; }
-                    container.Add(wr);
+                    if (!wordGroups.TryGetValue(key, out var container)) 
+                    { 
+                        container = new List<(int playerIndex, WordResult result)>(); 
+                        wordGroups[key] = container; 
+                    }
+                    container.Add((kv.Key, wr));
                 }
             }
             foreach (var g in wordGroups.Values)
             {
-                if (g.Count > 1)
+                // Get unique player indices for this word
+                var uniquePlayers = g.Select(x => x.playerIndex).Distinct().ToList();
+
+                // Only mark as duplicate if multiple DIFFERENT players entered this word
+                if (uniquePlayers.Count > 1)
                 {
-                    foreach (var wr in g) wr.IsDuplicate = true;
+                    foreach (var item in g) 
+                    {
+                        item.result.IsDuplicate = true;
+                    }
                 }
             }
 
