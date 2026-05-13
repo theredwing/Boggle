@@ -24,6 +24,7 @@ namespace Boggle.Pages
             public List<(int r, int c)> Path { get; set; }
             public bool IsDuplicate { get; set; }
             public string Definition { get; set; }
+            public int Score { get; set; }
         }
 
         // AJAX endpoint: POST /Review?handler=CleanWords
@@ -42,6 +43,7 @@ namespace Boggle.Pages
         }
 
         public Dictionary<int, List<WordResult>> PlayerResults { get; private set; } = new Dictionary<int, List<WordResult>>();
+        public Dictionary<int, int> PlayerScores { get; private set; } = new Dictionary<int, int>();
 
         public async Task OnGetAsync()
         {
@@ -57,19 +59,27 @@ namespace Boggle.Pages
             // Copy saved grid snapshot
             var grid = IndexModel.SavedGrid ?? new string[0];
             GridRows = new List<string[]>();
-            if (grid.Length == 25)
+
+            // Support both 5x5 (25) and 6x6 (36) grids
+            int gridSize = 0;
+            if (grid.Length == 25) gridSize = 5;
+            else if (grid.Length == 36) gridSize = 6;
+
+            if (gridSize > 0)
             {
-                for (int r = 0; r < 5; r++)
+                for (int r = 0; r < gridSize; r++)
                 {
-                    var row = new string[5];
-                    for (int c = 0; c < 5; c++) row[c] = grid[r * 5 + c] ?? string.Empty;
+                    var row = new string[gridSize];
+                    for (int c = 0; c < gridSize; c++) row[c] = grid[r * gridSize + c] ?? string.Empty;
                     GridRows.Add(row);
                 }
             }
 
             // Validate saved words for adjacency
-            var charGrid = new string[5,5];
-            for (int r = 0; r < 5; r++) for (int c = 0; c < 5; c++) charGrid[r, c] = (r*5+c < grid.Length) ? (grid[r*5+c] ?? string.Empty) : string.Empty;
+            var charGrid = new string[gridSize, gridSize];
+            for (int r = 0; r < gridSize; r++) 
+                for (int c = 0; c < gridSize; c++) 
+                    charGrid[r, c] = (r * gridSize + c < grid.Length) ? (grid[r * gridSize + c] ?? string.Empty) : string.Empty;
 
             foreach (var kv in SavedWords)
             {
@@ -161,6 +171,26 @@ namespace Boggle.Pages
                     }
                 }
             }
+
+            // Calculate scores for each word and total for each player
+            foreach (var kv in PlayerResults)
+            {
+                int totalScore = 0;
+                foreach (var wr in kv.Value)
+                {
+                    // Only score valid words that are not duplicates
+                    if (wr.IsValid && !wr.IsDuplicate)
+                    {
+                        wr.Score = CalculateScore(wr.Word);
+                        totalScore += wr.Score;
+                    }
+                    else
+                    {
+                        wr.Score = 0;
+                    }
+                }
+                PlayerScores[kv.Key] = totalScore;
+            }
         }
 
         private async Task<string> FetchDefinition(HttpClient client, string word)
@@ -204,7 +234,11 @@ namespace Boggle.Pages
         {
             if (string.IsNullOrWhiteSpace(word)) return null;
             var w = word.Trim();
-            int rows = 5, cols = 5;
+
+            // Determine grid size dynamically
+            int rows = grid.GetLength(0);
+            int cols = grid.GetLength(1);
+
             // normalize to single characters lower-case for comparison
             var target = w.ToLowerInvariant();
 
@@ -219,14 +253,27 @@ namespace Boggle.Pages
                 if (visited[r, c]) return false;
                 var cell = (grid[r, c] ?? string.Empty).ToLowerInvariant();
                 if (cell.Length == 0) return false;
-                // compare first character of cell to target[idx]
-                if (cell[0] != target[idx]) return false;
+
+                // Handle "Qu" square - it contributes both 'q' and 'u' to the path
+                int cellLength = cell.Length;
+
+                // Check if the cell matches the required sequence in the target word
+                if (idx + cellLength > target.Length) return false;
+
+                // Compare all characters in the cell with the target sequence
+                for (int i = 0; i < cellLength; i++)
+                {
+                    if (cell[i] != target[idx + i]) return false;
+                }
 
                 // consume this cell
                 visited[r, c] = true;
                 path.Add((r, c));
 
-                if (idx == target.Length - 1) return true;
+                // Move index forward by the number of characters this cell contributes
+                int nextIdx = idx + cellLength;
+
+                if (nextIdx >= target.Length) return true;
 
                 // explore neighbors
                 for (int dr = -1; dr <= 1; dr++)
@@ -235,7 +282,7 @@ namespace Boggle.Pages
                     {
                         if (dr == 0 && dc == 0) continue;
                         int nr = r + dr, nc = c + dc;
-                        if (dfs(nr, nc, idx + 1)) return true;
+                        if (dfs(nr, nc, nextIdx)) return true;
                     }
                 }
 
@@ -257,6 +304,45 @@ namespace Boggle.Pages
             }
 
             return null;
+        }
+
+        private int CalculateScore(string word)
+        {
+            if (string.IsNullOrWhiteSpace(word)) return 0;
+
+            int length = word.Trim().Length;
+
+            // Scoring based on word length
+            return length switch
+            {
+                4 => 1,
+                5 => 2,
+                6 => 3,
+                7 => 5,
+                8 => 8,
+                9 => 12,
+                10 => 17,
+                11 => 23,
+                12 => 30,
+                13 => 38,
+                14 => 47,
+                15 => 57,
+                16 => 68,
+                17 => 80,
+                18 => 93,
+                19 => 107,
+                20 => 122,
+                21 => 138,
+                22 => 155,
+                23 => 173,
+                24 => 192,
+                25 => 212,
+                26 => 233,
+                27 => 255,
+                28 => 278,
+                29 => 302,
+                _ => 0 // Less than 4 or more than 29
+            };
         }
     }
 }

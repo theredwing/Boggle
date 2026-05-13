@@ -5,87 +5,90 @@
     ViewData["Title"] = "Review Saved Words";
 }
 
-<div class="text-center">
+<div class="text-start">
     <h1 class="display-4">Review Saved Words</h1>
     <br />
 
     <a href="#" id="backToGame">Back to Game</a>
 
     <div class="review-container" id="PlayerResults">
-        <h3>Saved Grid</h3>
-        @* Grid editor and display *@
-
-
-        @if (Model.GridRows == null || Model.GridRows.Count == 0)
-        {
-            <p><em>No grid saved.</em></p>
-        }
-        else
-        {
-            <table id="boggleGrid" class="table table-bordered">
-                <tbody>
-                    @for (int r = 0; r < Model.GridRows.Count; r++)
-                    {
-                        <tr>
-                            @for (int c = 0; c < Model.GridRows[r].Length; c++)
+        <!-- Grid at the top -->
+        <div class="row">
+            <div class="col-12">
+                <h3>Saved Grid</h3>
+                @if (Model.GridRows == null || Model.GridRows.Count == 0)
+                {
+                    <p><em>No grid saved.</em></p>
+                }
+                else
+                {
+                    <table id="boggleGrid" class="table table-bordered" style="width: auto; margin: 0 auto;">
+                        <tbody>
+                            @for (int r = 0; r < Model.GridRows.Count; r++)
                             {
-                                <td id="r@(r+1)c@(c+1)">@Model.GridRows[r][c]</td>
+                                <tr>
+                                    @for (int c = 0; c < Model.GridRows[r].Length; c++)
+                                    {
+                                        <td id="r@(r+1)c@(c+1)">@Model.GridRows[r][c]</td>
+                                    }
+                                </tr>
                             }
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
-
-        <h3>Saved Words</h3>
-        @if (Model.SavedWords == null || Model.SavedWords.Count == 0)
-        {
-            <p>No saved words yet.</p>
-        }
-        else
-        {
-            <table class="table table-sm">
-                <thead>
-                    <tr>
-                        <th>Player</th>
-                        <th>Words</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var kv in Model.SavedWords)
+                        </tbody>
+                    </table>
+                }
+            </div>
+            <!-- Player Results -->
+            <h3>Player Results</h3>
+            @if (Model.SavedWords == null || Model.SavedWords.Count == 0)
+            {
+                <p>No saved words yet.</p>
+            }
+            else
+            {
+                <!-- Players 1-3 in one row -->
+                <div class="row">
+                    @foreach (var kv in Model.SavedWords.OrderBy(x => x.Key))
                     {
                         var playerNumber = kv.Key + 1;
-                        <tr>
-                            <td>Player @playerNumber</td>
-                            <td>
+                        <div class="col-md-4">
+                            <div class="player-result-card">
+                                <h4>Player @playerNumber</h4>
+                                <p><strong>Score: @Model.PlayerScores.GetValueOrDefault(kv.Key, 0)</strong></p>
                                 @if (kv.Value == null || kv.Value.Length == 0)
                                 {
-                                    <em>(no words)</em>
+                                    <p><em>(no words)</em></p>
                                 }
                                 else
                                 {
-                                    <ul id="playerWords@(kv.Key)">
+                                    <ul id="playerWords@(kv.Key)" class="player-words-list">
                                         @foreach (var res in Model.PlayerResults[kv.Key])
                                         {
                                             var classes = new List<string>();
                                             if (res.IsValid) classes.Add("valid"); else classes.Add("invalid");
                                             if (res.IsDuplicate) classes.Add("duplicate");
                                             var liClass = string.Join(" ", classes);
-                                            // encode path as semicolon-separated r,c pairs
                                             var pathAttr = res.Path != null ? string.Join(";", res.Path.Select(p=>$"{p.r},{p.c}")) : string.Empty;
                                             var defAttr = res.Definition ?? string.Empty;
-                                            <li class="@liClass" data-path="@pathAttr" data-definition="@defAttr" title="@defAttr">@res.Word @if(res.IsDuplicate){<span class="dupnote">(duplicate)</span>}</li>
+                                            var scoreDisplay = res.Score > 0 ? $" ({res.Score} pts)" : "";
+                                            <li class="@liClass" data-path="@pathAttr" data-definition="@defAttr" title="@defAttr">@res.Word@scoreDisplay @if(res.IsDuplicate){<span class="dupnote">(duplicate)</span>}</li>
                                         }
                                     </ul>
                                 }
-                            </td>
-                        </tr>
+                            </div>
+                        </div>
                     }
-                </tbody>
-            </table>
-        }
-    </div>
+                </div>
 
+                <!-- Total Scores -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h4>Total Combined Score: @Model.PlayerScores.Values.Sum()</h4>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
 <script>
     const antiforgeryToken = '@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken';
 

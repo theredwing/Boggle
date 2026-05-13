@@ -24,22 +24,18 @@
             <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
-            <option value="4">4</option>
+        </select>
+
+        <label for="gridSize" style="margin-left: 20px;">Grid Size:</label>
+        <select id="gridSize">
+            <option value="5" selected>5 x 5</option>
+            <option value="6">6 x 6</option>
         </select>
 
         <div id="playersContainer"></div>
     </div>
 
     <table id="boggleTable">
-        @for (int r = 1; r <= rows; r++)
-        {
-            <tr>
-                @for (int c = 1; c <= cols; c++)
-                {
-                    <td class="my-box" id="@($"r{r}c{c}")">&nbsp;</td>
-                }
-            </tr>
-        }
     </table>
 
     <!-- Instructions Modal -->
@@ -52,13 +48,59 @@
                 <li>Press "Shuffle" to generate a new letter grid</li>
                 <li>The lowest numbered player clicks "Start", enters words separated by commas, until time expires</li>
                 <li>The next lowest numbered player repeats step 3, and so on</li>
+                <li class="highlight">Only 4+ letter words allowed</li>
+                <li><a href="#" id="scoringLink">View Scoring</a></li>
             </ol>
         </div>
     </div>
 
+    <!-- Scoring Modal -->
+    <div id="scoringModal" class="modal">
+        <div class="modal-content">
+            <span class="close-scoring">&times;</span>
+            <h2>Boggle Scoring</h2>
+            <table class="scoring-table">
+                <thead>
+                    <tr>
+                        <th>Word Length</th>
+                        <th>Points</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>4 letters</td><td>1</td></tr>
+                    <tr><td>5 letters</td><td>2</td></tr>
+                    <tr><td>6 letters</td><td>3</td></tr>
+                    <tr><td>7 letters</td><td>5</td></tr>
+                    <tr><td>8 letters</td><td>8</td></tr>
+                    <tr><td>9 letters</td><td>12</td></tr>
+                    <tr><td>10 letters</td><td>17</td></tr>
+                    <tr><td>11 letters</td><td>23</td></tr>
+                    <tr><td>12 letters</td><td>30</td></tr>
+                    <tr><td>13 letters</td><td>38</td></tr>
+                    <tr><td>14 letters</td><td>47</td></tr>
+                    <tr><td>15 letters</td><td>57</td></tr>
+                    <tr><td>16 letters</td><td>68</td></tr>
+                    <tr><td>17 letters</td><td>80</td></tr>
+                    <tr><td>18 letters</td><td>93</td></tr>
+                    <tr><td>19 letters</td><td>107</td></tr>
+                    <tr><td>20 letters</td><td>122</td></tr>
+                    <tr><td>21 letters</td><td>138</td></tr>
+                    <tr><td>22 letters</td><td>155</td></tr>
+                    <tr><td>23 letters</td><td>173</td></tr>
+                    <tr><td>24 letters</td><td>192</td></tr>
+                    <tr><td>25 letters</td><td>212</td></tr>
+                    <tr><td>26 letters</td><td>233</td></tr>
+                    <tr><td>27 letters</td><td>255</td></tr>
+                    <tr><td>28 letters</td><td>278</td></tr>
+                    <tr><td>29 letters</td><td>302</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <script>
-        const rows = @rows;
-        const cols = @cols;
+        let rows = 5;
+        let cols = 5;
         const antiforgeryToken = '@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken';
 
         // Player words storage (hidden lists after each player's turn)
@@ -69,10 +111,26 @@
         let totalPlayers = 0;
 
         // jQuery elements (will be initialized on document ready)
-        let $playerCountSelect, $playersContainer, $shuffleBtn, $reviewLink;
+        let $playerCountSelect, $playersContainer, $shuffleBtn, $reviewLink, $gridSizeSelect;
 
         function randomLetter() {
             return String.fromCharCode('A'.charCodeAt(0) + Math.floor(Math.random() * 26));
+        }
+
+        function buildGrid(size) {
+            rows = size;
+            cols = size;
+            const $table = $('#boggleTable');
+            $table.empty();
+
+            for (let r = 1; r <= rows; r++) {
+                const $tr = $('<tr></tr>');
+                for (let c = 1; c <= cols; c++) {
+                    const id = `r${r}c${c}`;
+                    $tr.append($('<td></td>').addClass('my-box').attr('id', id).html('&nbsp;'));
+                }
+                $table.append($tr);
+            }
         }
 
         function shuffleGrid() {
@@ -103,6 +161,17 @@
                     }
 
                     $el.text(letter);
+                }
+            }
+
+            // Check for Q and convert to Qu (counts as two letters)
+            for (let r = 1; r <= rows; r++) {
+                for (let c = 1; c <= cols; c++) {
+                    const id = `r${r}c${c}`;
+                    const $el = $(`#${id}`);
+                    if ($el.length > 0 && $el.text() === 'Q') {
+                        $el.text('Qu');
+                    }
                 }
             }
         }
@@ -158,13 +227,22 @@
         }
 
         function enableStart(index) {
-            $(`#startBtn${index}`).prop('disabled', false);
+            const $btn = $(`#startBtn${index}`);
+            if ($btn.length > 0) {
+                $btn.prop('disabled', false);
+            } else {
+                console.error(`Start button ${index} not found`);
+            }
         }
 
         function handleStart(index) {
             const $startBtn = $(`#startBtn${index}`);
             if ($startBtn.length === 0) return;
             $startBtn.prop('disabled', true); // immediately disabled
+
+            // Remove blur from grid when player starts
+            $('#boggleTable').removeClass('blurred');
+
             // show and enable textarea
             const $inputArea = $(`#inputArea${index}`);
             const $ta = $(`#playerTextarea${index}`);
@@ -438,6 +516,8 @@
                         const count = parseInt($playerCountSelect.val());
                         const next = index + 1;
                         if (next < count) {
+                            // Blur the grid before enabling the next player's start button
+                            $('#boggleTable').addClass('blurred');
                             enableStart(next);
                         } else {
                             // finished all players
@@ -517,13 +597,38 @@
             $playersContainer = $('#playersContainer');
             $shuffleBtn = $('#shuffleBtn');
             $reviewLink = $('#reviewLink');
+            $gridSizeSelect = $('#gridSize');
+
+            // Build initial grid
+            buildGrid(parseInt($gridSizeSelect.val()));
 
             // Disable Review link initially
             $reviewLink.addClass('disabled');
 
+            // Grid size change handler
+            $gridSizeSelect.on('change', () => {
+                const newSize = parseInt($gridSizeSelect.val());
+                buildGrid(newSize);
+                // Reset game state when grid size changes
+                disableAllStarts();
+                $shuffleBtn.prop('disabled', false);
+                completedPlayers = 0;
+                updateReviewLinkState();
+            });
+
             // Shuffle button behavior: populate grid, save it, and enable player1 start
             $shuffleBtn.on('click', async () => {
+                // Ensure rows and cols are current
+                const currentSize = parseInt($gridSizeSelect.val());
+                rows = currentSize;
+                cols = currentSize;
+
+                console.log(`Shuffling grid: ${rows}x${cols}`);
+
                 shuffleGrid();
+
+                // Add blur to the grid after shuffling
+                $('#boggleTable').addClass('blurred');
 
                 // build grid array (flattened row-major)
                 const grid = [];
@@ -534,6 +639,8 @@
                         grid.push($el.length > 0 && $el.text() ? $el.text().trim() : '');
                     }
                 }
+
+                console.log(`Grid array length: ${grid.length}`);
 
                 // try to save grid with retries; if final failure, persist locally but allow play to continue
                 let gridSaved = false;
@@ -553,6 +660,7 @@
                 // reset displays
                 renderPlayers(parseInt($playerCountSelect.val()));
                 // enable first player's start
+                console.log('Enabling start button for player 0');
                 enableStart(0);
                 $shuffleBtn.prop('disabled', true);
             });
@@ -573,22 +681,39 @@
             $(window).on('online', () => { tryResendFailedSaves(); tryResendFailedGrids(); });
 
             // Instructions modal functionality
-            const $modal = $('#instructionsModal');
+            const $instructionsModal = $('#instructionsModal');
             const $instructionsLink = $('#instructionsLink');
             const $closeBtn = $('.close');
 
             $instructionsLink.on('click', (e) => {
                 e.preventDefault();
-                $modal.show();
+                $instructionsModal.show();
             });
 
             $closeBtn.on('click', () => {
-                $modal.hide();
+                $instructionsModal.hide();
+            });
+
+            // Scoring modal functionality
+            const $scoringModal = $('#scoringModal');
+            const $scoringLink = $('#scoringLink');
+            const $closeScoringBtn = $('.close-scoring');
+
+            $scoringLink.on('click', (e) => {
+                e.preventDefault();
+                $scoringModal.show();
+            });
+
+            $closeScoringBtn.on('click', () => {
+                $scoringModal.hide();
             });
 
             $(window).on('click', (e) => {
                 if (e.target.id === 'instructionsModal') {
-                    $modal.hide();
+                    $instructionsModal.hide();
+                }
+                if (e.target.id === 'scoringModal') {
+                    $scoringModal.hide();
                 }
             });
         });

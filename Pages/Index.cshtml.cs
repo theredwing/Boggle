@@ -45,8 +45,9 @@ namespace Boggle.Pages
                 var dto = JsonSerializer.Deserialize<SaveGridDto>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 if (dto?.Grid != null)
                 {
-                    // expect 25 values for 5x5
-                    if (dto.Grid.Length != 25) return new JsonResult(new { success = false, error = "grid must have 25 elements" });
+                    // accept 25 values for 5x5 or 36 values for 6x6
+                    if (dto.Grid.Length != 25 && dto.Grid.Length != 36) 
+                        return new JsonResult(new { success = false, error = "grid must have 25 (5x5) or 36 (6x6) elements" });
                     lock (GridLock)
                     {
                         SavedGrid = dto.Grid.ToArray();
@@ -67,7 +68,7 @@ namespace Boggle.Pages
         }
 
         // AJAX endpoint: POST /Index?handler=ValidateGrid
-        // Accepts a grid (25 strings) and returns validation results for SavedWords
+        // Accepts a grid (25 or 36 strings) and returns validation results for SavedWords
         public async Task<IActionResult> OnPostValidateGridAsync()
         {
             using var reader = new StreamReader(Request.Body);
@@ -77,11 +78,15 @@ namespace Boggle.Pages
             try
             {
                 var dto = JsonSerializer.Deserialize<SaveGridDto>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                if (dto?.Grid == null || dto.Grid.Length != 25) return new JsonResult(new { success = false, error = "grid must have 25 elements" });
+                if (dto?.Grid == null || (dto.Grid.Length != 25 && dto.Grid.Length != 36)) 
+                    return new JsonResult(new { success = false, error = "grid must have 25 (5x5) or 36 (6x6) elements" });
 
-                // build grid 5x5
-                var grid = new string[5, 5];
-                for (int r = 0; r < 5; r++) for (int c = 0; c < 5; c++) grid[r, c] = dto.Grid[r * 5 + c] ?? string.Empty;
+                // build grid dynamically based on size
+                int gridSize = dto.Grid.Length == 25 ? 5 : 6;
+                var grid = new string[gridSize, gridSize];
+                for (int r = 0; r < gridSize; r++) 
+                    for (int c = 0; c < gridSize; c++) 
+                        grid[r, c] = dto.Grid[r * gridSize + c] ?? string.Empty;
 
                 // validate saved words
                 var results = new Dictionary<int, List<object>>();
@@ -116,7 +121,11 @@ namespace Boggle.Pages
         {
             if (string.IsNullOrWhiteSpace(word)) return null;
             var target = word.Trim().ToLowerInvariant();
-            int rows = 5, cols = 5;
+
+            // Get grid dimensions dynamically
+            int rows = grid.GetLength(0);
+            int cols = grid.GetLength(1);
+
             bool[,] visited = new bool[rows, cols];
             List<(int r, int c)> path = new List<(int r, int c)>();
 
@@ -127,18 +136,33 @@ namespace Boggle.Pages
                 if (visited[r, c]) return false;
                 var cell = (grid[r, c] ?? string.Empty).ToLowerInvariant();
                 if (cell.Length == 0) return false;
-                if (cell[0] != target[idx]) return false;
+
+                // Handle "Qu" square - it contributes both 'q' and 'u' to the path
+                int cellLength = cell.Length;
+
+                // Check if the cell matches the required sequence in the target word
+                if (idx + cellLength > target.Length) return false;
+
+                // Compare all characters in the cell with the target sequence
+                for (int i = 0; i < cellLength; i++)
+                {
+                    if (cell[i] != target[idx + i]) return false;
+                }
 
                 visited[r, c] = true;
                 path.Add((r, c));
-                if (idx == target.Length - 1) return true;
+
+                // Move index forward by the number of characters this cell contributes
+                int nextIdx = idx + cellLength;
+
+                if (nextIdx >= target.Length) return true;
 
                 for (int dr = -1; dr <= 1; dr++)
                 {
                     for (int dc = -1; dc <= 1; dc++)
                     {
                         if (dr == 0 && dc == 0) continue;
-                        if (dfs(r + dr, c + dc, idx + 1)) return true;
+                        if (dfs(r + dr, c + dc, nextIdx)) return true;
                     }
                 }
 

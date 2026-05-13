@@ -96,6 +96,17 @@
     background: #ffff99;
 }
 
+/* Boggle Table Blur Effect */
+#boggleTable.blurred {
+    filter: blur(8px);
+    -webkit-filter: blur(8px);
+    transition: filter 0.3s ease;
+}
+
+#boggleTable {
+    transition: filter 0.3s ease;
+}
+
 /* Word Validation Styles */
 li.valid {
     color: green;
@@ -167,4 +178,79 @@ li.duplicate {
 .instructions-list li {
     margin-bottom: 10px;
     line-height: 1.6;
+}
+
+.instructions-list li.highlight {
+    font-weight: bold;
+    color: #d9534f;
+    background-color: #fcf8e3;
+    padding: 5px;
+    border-left: 3px solid #d9534f;
+}
+
+#scoringLink {
+    color: #0066cc;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+#scoringLink:hover {
+    text-decoration: underline;
+}
+
+/* Scoring Table */
+.scoring-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+.scoring-table th,
+.scoring-table td {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+.scoring-table th {
+    background-color: #f5f5f5;
+    font-weight: bold;
+}
+
+.scoring-table tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.scoring-table tbody tr:hover {
+    background-color: #f0f0f0;
+}
+
+/* Player Result Cards */
+.player-result-card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+    background-color: #f9f9f9;
+    min-height: 200px;
+}
+
+.player-result-card h4 {
+    margin-top: 0;
+    color: #333;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+}
+
+.player-words-list {
+    list-style: none;
+    padding-left: 0;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.player-words-list li {
+    padding: 4px 0;
+    font-size: 0.95em;
 }
